@@ -1,0 +1,26 @@
+# TODO Câu 1 + Câu 5: Chuyển các cấu hình dưới đây sang Config Server (config-repo/payment-service.yml).
+#                    File này chỉ nên giữ lại spring.application.name và spring.config.import
+server:
+  port: 8083
+
+spring:
+  application:
+    name: payment-service
+  datasource:
+    url: jdbc:mysql://localhost:3306/shopmart_payment?createDatabaseIfNotExist=true
+    username: root
+    password: 123456
+  jpa:
+    hibernate:
+      ddl-auto: update
+    show-sql: false
+
+# Giả lập cổng thanh toán
+payment:
+  # Đặt true để cố tình làm thanh toán thất bại -> chứng minh Saga rollback (Câu 3)
+  simulate-failure: false
+  # Giao dịch vượt hạn mức sẽ thất bại (vd: đặt 3 chiếc MacBook = 84.000.000)
+  max-amount: 80000000
+
+# TODO Câu 1: eureka.client.serviceUrl.defaultZone=http://localhost:8761/eureka
+# TODO Câu 3: spring.kafka.*

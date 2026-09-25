@@ -1,0 +1,20 @@
+# TODO Câu 1 + Câu 5: Chuyển các cấu hình dưới đây sang Config Server (config-repo/order-service.yml).
+#                    File này chỉ nên giữ lại spring.application.name và spring.config.import
+server:
+  port: 8081
+
+spring:
+  application:
+    name: order-service
+  datasource:
+    url: jdbc:mysql://localhost:3306/shopmart_order?createDatabaseIfNotExist=true
+    username: root
+    password: 123456
+  jpa:
+    hibernate:
+      ddl-auto: update
+    show-sql: false
+
+# TODO Câu 1: eureka.client.serviceUrl.defaultZone=http://localhost:8761/eureka
+# TODO Câu 2: resilience4j.circuitbreaker.instances.<tên>.* , management.endpoints (actuator)
+# TODO Câu 3: spring.kafka.*

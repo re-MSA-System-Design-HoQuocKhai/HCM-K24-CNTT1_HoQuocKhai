@@ -1,0 +1,11 @@
+# ======================================================================
+# CẤU HÌNH DÙNG CHUNG CHO TẤT CẢ SERVICE (được Config Server phân phát)
+# ======================================================================
+# TODO Câu 1: Đưa các cấu hình dùng chung vào đây, ví dụ:
+#   - eureka.client.serviceUrl.defaultZone
+#   - spring.kafka.bootstrap-servers
+#   - spring.data.redis.host / port
+#   - logging.level...
+#
+# Cấu hình riêng từng service đặt trong file <spring.application.name>.yml
+# (ví dụ: order-service.yml, inventory-service.yml, payment-service.yml)

@@ -1,0 +1,28 @@
+# Hạ tầng chạy local cho ShopMart.
+#   docker compose up -d
+#
+# MySQL đã được cấu hình sẵn (mỗi service tự tạo database riêng - Database per Service):
+#   shopmart_order | shopmart_inventory | shopmart_payment
+# Nếu máy đã có MySQL chạy ở cổng 3306 thì có thể bỏ service mysql bên dưới
+# và sửa username/password trong cấu hình của từng service.
+
+services:
+  mysql:
+    image: mysql:8.0
+    container_name: shopmart-mysql
+    environment:
+      MYSQL_ROOT_PASSWORD: 123456
+    ports:
+      - "3306:3306"
+    volumes:
+      - mysql_data:/var/lib/mysql
+
+  # TODO Câu 3: Khởi tạo Kafka broker
+  #   - zookeeper (vd: confluentinc/cp-zookeeper) - cổng 2181
+  #   - kafka     (vd: confluentinc/cp-kafka)     - cổng 9092, phụ thuộc zookeeper
+
+  # TODO Câu 4: Khởi tạo Redis server
+  #   - redis (vd: redis:7-alpine) - cổng 6379
+
+volumes:
+  mysql_data:

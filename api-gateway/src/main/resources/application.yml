@@ -1,0 +1,14 @@
+server:
+  port: 8080
+
+spring:
+  application:
+    name: api-gateway
+
+# TODO Câu 1: Khai báo routes cho Gateway (dùng lb:// để có Load Balancing)
+#   /api/order/**     -> order-service
+#   /api/inventory/** -> inventory-service
+#   /api/payment/**   -> payment-service
+#
+# TODO Câu 1: Đăng ký vào Eureka
+#   eureka.client.serviceUrl.defaultZone=http://localhost:8761/eureka

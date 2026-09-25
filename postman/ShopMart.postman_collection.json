@@ -1,0 +1,133 @@
+{
+  "info": {
+    "name": "ShopMart - Base Project",
+    "description": "Gọi trực tiếp từng service. Sau khi hoàn thành API Gateway (Câu 1), đổi các biến orderUrl/inventoryUrl/paymentUrl thành http://localhost:8080 để đi qua Gateway.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    { "key": "orderUrl", "value": "http://localhost:8081" },
+    { "key": "inventoryUrl", "value": "http://localhost:8082" },
+    { "key": "paymentUrl", "value": "http://localhost:8083" }
+  ],
+  "item": [
+    {
+      "name": "Inventory",
+      "item": [
+        {
+          "name": "Get instance port",
+          "request": { "method": "GET", "url": "{{inventoryUrl}}/api/inventory/instance" }
+        },
+        {
+          "name": "Get all products",
+          "request": { "method": "GET", "url": "{{inventoryUrl}}/api/inventory/products" }
+        },
+        {
+          "name": "Get product by id",
+          "request": { "method": "GET", "url": "{{inventoryUrl}}/api/inventory/products/1" }
+        },
+        {
+          "name": "Create product",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"name\": \"iPad Air M2\",\n  \"price\": 16000000,\n  \"stock\": 15\n}" },
+            "url": "{{inventoryUrl}}/api/inventory/products"
+          }
+        },
+        {
+          "name": "Update product",
+          "request": {
+            "method": "PUT",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"name\": \"iPhone 15 Pro\",\n  \"price\": 24000000,\n  \"stock\": 50\n}" },
+            "url": "{{inventoryUrl}}/api/inventory/products/1"
+          }
+        },
+        {
+          "name": "Decrease stock",
+          "request": {
+            "method": "PUT",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"quantity\": 2\n}" },
+            "url": "{{inventoryUrl}}/api/inventory/products/1/decrease"
+          }
+        },
+        {
+          "name": "Increase stock (compensate)",
+          "request": {
+            "method": "PUT",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"quantity\": 2\n}" },
+            "url": "{{inventoryUrl}}/api/inventory/products/1/increase"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Payment",
+      "item": [
+        {
+          "name": "Pay (success)",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"orderId\": 1001,\n  \"amount\": 25000000\n}" },
+            "url": "{{paymentUrl}}/api/payment"
+          }
+        },
+        {
+          "name": "Pay (fail - over max-amount)",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"orderId\": 1002,\n  \"amount\": 84000000\n}" },
+            "url": "{{paymentUrl}}/api/payment"
+          }
+        },
+        {
+          "name": "Refund (compensate)",
+          "request": { "method": "POST", "url": "{{paymentUrl}}/api/payment/1001/refund" }
+        },
+        {
+          "name": "Get payment by orderId",
+          "request": { "method": "GET", "url": "{{paymentUrl}}/api/payment/1001" }
+        },
+        {
+          "name": "Get all payments",
+          "request": { "method": "GET", "url": "{{paymentUrl}}/api/payment" }
+        }
+      ]
+    },
+    {
+      "name": "Order",
+      "item": [
+        {
+          "name": "Create order (happy path)",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"customerId\": \"C001\",\n  \"productId\": 1,\n  \"quantity\": 2\n}" },
+            "url": "{{orderUrl}}/api/order"
+          }
+        },
+        {
+          "name": "Create order (payment fail -> rollback)",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"customerId\": \"C002\",\n  \"productId\": 3,\n  \"quantity\": 3\n}" },
+            "url": "{{orderUrl}}/api/order"
+          }
+        },
+        {
+          "name": "Get order by id",
+          "request": { "method": "GET", "url": "{{orderUrl}}/api/order/1" }
+        },
+        {
+          "name": "Get all orders",
+          "request": { "method": "GET", "url": "{{orderUrl}}/api/order" }
+        }
+      ]
+    }
+  ]
+}
