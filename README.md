@@ -1,124 +1,188 @@
-# ShopMart – Base Project (Java Microservice – Session 14)
+# ShopMart – Báo Cáo Thực Hành Đầu Giờ Java Microservice Session 14
 
-Base project cho bài kiểm tra **"Nâng cấp phân hệ đặt hàng thành giao dịch phân tán (Saga Pattern)"**.
+> **Học viên:** Hồ Quốc Khải  
+> **Lớp:** HCM-K24-CNTT1  
+> **Đề tài:** Nâng cấp phân hệ đặt hàng thành giao dịch phân tán (Saga Pattern) cho hệ thống thương mại điện tử ShopMart  
+> **Công nghệ:** Java 17/21, Spring Boot 3.3.5, Spring Cloud 2023.0.3, Apache Kafka, Redis, MySQL, Resilience4j, Spring Cloud Gateway, Netflix Eureka, OpenFeign, Spring Cloud LoadBalancer.
 
-> Sau khi clone: **xoá thư mục `.git`**, sau đó `git init` và đẩy lên repository của bạn theo cú pháp
-> `[Tên lớp]_[Họ Tên]` (ví dụ: `HN-K24-CNTT1_NguyenVanA`).
+---
 
-## 1. Công nghệ
+## I. Tổng Quan Kiến Trúc Hệ Thống
 
-| Thành phần | Phiên bản |
-|---|---|
-| Java | 17+ |
-| Spring Boot | 3.3.5 |
-| Spring Cloud | 2023.0.3 (BOM đã khai báo sẵn trong `pom.xml` gốc – thêm dependency **không cần ghi version**) |
-| MySQL | 8.x (Docker Compose) |
-| Kafka / Redis | sinh viên tự bổ sung vào `docker-compose.yml` |
-
-## 2. Cấu trúc project
-
-```
-Base-Project
-├── pom.xml                  # Parent POM (multi-module)
-├── docker-compose.yml       # MySQL (đã có) + TODO Kafka/Zookeeper/Redis
-├── config-repo/             # Nơi lưu file cấu hình cho Config Server (native)
-├── config-server/     :8888 # [SKELETON] Câu 1
-├── eureka-server/     :8761 # [SKELETON] Câu 1
-├── api-gateway/       :8080 # [SKELETON] Câu 1
-├── order-service/     :8081 # [ĐÃ CHẠY ĐƯỢC] quản lý đơn hàng
-├── inventory-service/ :8082 # [ĐÃ CHẠY ĐƯỢC] quản lý tồn kho (có dữ liệu mẫu)
-└── payment-service/   :8083 # [ĐÃ CHẠY ĐƯỢC] xử lý thanh toán (có giả lập lỗi)
-```
-
-Mỗi business service có cấu trúc package chuẩn:
+Hệ thống ShopMart được xây dựng theo mô hình Microservices với nguyên tắc **Database-per-Service**:
+- `config-server` (Port 8888): Quản lý cấu hình tập trung lưu tại thư mục `config-repo/`.
+- `eureka-server` (Port 8761): Service Registry & Discovery.
+- `api-gateway` (Port 8080): Điểm vào duy nhất (Single Point of Entry), định tuyến request tới các service và cân bằng tải client-side qua Spring Cloud LoadBalancer.
+- `inventory-service` (Port 8082, instance 2: 8084): Quản lý sản phẩm, tồn kho, tích hợp Redis Caching (Cache-Aside) và Kafka Consumer Reactive (WebFlux).
+- `payment-service` (Port 8083): Xử lý thanh toán, giả lập hạn mức và cổng thanh toán để kích hoạt Saga Rollback.
+- `order-service` (Port 8081): Quản lý đơn hàng, gọi inventory-service qua FeignClient có bọc Resilience4j Circuit Breaker, đóng vai trò khởi xướng và điều phối Choreography Saga qua Kafka topic `order`.
 
 ```
-com.shopmart.<service>
-├── controller    # REST API
-├── service       # interface + impl (nghiệp vụ, log SLF4J)
-├── repository    # Spring Data JPA
-├── entity        # JPA entity
-├── dto           # request/response
-├── event         # OrderEvent, SagaEventType, KafkaTopics (đã có sẵn cho Câu 3)
-└── exception     # GlobalExceptionHandler
+                        +----------------------+
+                        |     Client / Web     |
+                        +----------+-----------+
+                                   | :8080
+                                   v
+                        +----------------------+
+                        |     API Gateway      |
+                        +----------+-----------+
+                                   | (lb://service)
+        +--------------------------+--------------------------+
+        |                          |                          |
+        v :8081                    v :8082 / :8084            v :8083
++---------------+          +-------------------+      +-----------------+
+| order-service | -Feign-> | inventory-service |      | payment-service |
++-------+-------+          +---------+---------+      +--------+--------+
+        | (Resilience4j)             |                         |
+        |                            |                         |
+        +----------------------------+-------------------------+
+                                     |
+                                     v
+                        +----------------------+
+                        |  Kafka Topic "order" |
+                        +----------------------+
+                                     |
+               (Choreography Saga / Compensating Rollback)
 ```
 
-## 3. Những gì đã có sẵn
+---
 
-### inventory-service (`/api/inventory`)
-| Method | Endpoint | Mô tả |
-|---|---|---|
-| GET | `/api/inventory/instance` | Trả về port của instance (minh chứng Load Balancing) |
-| GET | `/api/inventory/products` | Danh sách sản phẩm |
-| GET | `/api/inventory/products/{id}` | Chi tiết sản phẩm (có log `Querying DB...` để kiểm tra cache) |
-| POST | `/api/inventory/products` | Tạo sản phẩm |
-| PUT | `/api/inventory/products/{id}` | Cập nhật sản phẩm |
-| DELETE | `/api/inventory/products/{id}` | Xoá sản phẩm |
-| PUT | `/api/inventory/products/{id}/decrease` | Trừ tồn kho – body `{"quantity": 2}` |
-| PUT | `/api/inventory/products/{id}/increase` | Hoàn tồn kho (compensate) – body `{"quantity": 2}` |
+## II. Chi Tiết Thực Hiện Theo 4 Câu Hỏi & Tiêu Chí Chấm Điểm
 
-Dữ liệu mẫu (`data.sql`): 5 sản phẩm, id 1 → 5 (sản phẩm id=3 MacBook giá 28.000.000).
+### Câu 1: Hạ Tầng Config Server, Service Discovery (Eureka) & API Gateway (30 điểm)
 
-### payment-service (`/api/payment`)
-| Method | Endpoint | Mô tả |
-|---|---|---|
-| POST | `/api/payment` | Thanh toán – body `{"orderId": 1, "amount": 50000000}` → `SUCCESS` (201) hoặc `FAILED` (402) |
-| POST | `/api/payment/{orderId}/refund` | Hoàn tiền (compensate) |
-| GET | `/api/payment/{orderId}` | Tra cứu thanh toán theo đơn |
-| GET | `/api/payment` | Danh sách thanh toán |
+1. **Config Server (10 điểm):**
+   - Đã khai báo `@EnableConfigServer` tại `ConfigServerApplication`.
+   - Cấu hình server lưu trữ tập trung dạng native tại `file:./config-repo`:
+     - `config-repo/application.yml`: Cấu hình dùng chung (Eureka URL, Kafka broker & serializers, Redis host/port, Log level).
+     - `config-repo/order-service.yml`: Cấu hình datasource MySQL, Resilience4j Circuit Breaker và Actuator endpoints.
+     - `config-repo/inventory-service.yml`: Cấu hình datasource MySQL, Redis cache TTL và serialization.
+     - `config-repo/payment-service.yml`: Cấu hình datasource MySQL, tham số giả lập lỗi `payment.simulate-failure` và hạn mức `payment.max-amount=80000000`.
+   - Các business service nạp cấu hình qua `spring.config.import: optional:configserver:http://localhost:8888`.
 
-**Giả lập lỗi thanh toán** (dùng để chứng minh rollback ở Câu 3):
-- `payment.simulate-failure=true` → mọi giao dịch đều `FAILED`
-- Số tiền > `payment.max-amount` (mặc định 80.000.000) → `FAILED`
-  (ví dụ: đặt 3 chiếc MacBook id=3 = 84.000.000)
+2. **Eureka Server & Service Discovery (10 điểm):**
+   - Khai báo `@EnableEurekaServer` tại `EurekaServerApplication` (Port 8761).
+   - Đã bổ sung `@EnableDiscoveryClient` và dependency `spring-cloud-starter-netflix-eureka-client` vào tất cả các service (`api-gateway`, `order-service`, `inventory-service`, `payment-service`).
+   - Kiểm tra trực quan trên Dashboard: `http://localhost:8761` hiển thị đầy đủ các service instances.
 
-### order-service (`/api/order`)
-| Method | Endpoint | Mô tả |
-|---|---|---|
-| POST | `/api/order` | Tạo đơn – body `{"customerId": "C001", "productId": 1, "quantity": 2}` |
-| GET | `/api/order/{id}` | Chi tiết đơn |
-| GET | `/api/order` | Danh sách đơn |
+3. **API Gateway & Client-side Load Balancing (10 điểm):**
+   - Sử dụng `spring-cloud-starter-gateway` kết hợp `spring-cloud-starter-loadbalancer`.
+   - Khai báo routes linh hoạt theo prefix:
+     - `/api/order/**` $\rightarrow$ `lb://order-service`
+     - `/api/inventory/**` $\rightarrow$ `lb://inventory-service`
+     - `/api/payment/**` $\rightarrow$ `lb://payment-service`
 
-Hiện tại `createOrder` **chỉ lưu đơn ở trạng thái `PENDING`** (chưa gọi service khác).
-`OrderService` đã có sẵn `completeOrder(...)` và `cancelOrder(...)` để dùng khi Saga kết thúc.
+---
 
-Trạng thái đơn: `PENDING` → `COMPLETED` | `CANCELLED`.
+### Câu 2: Giao Tiếp Đồng Bộ Bằng FeignClient & Kháng Lỗi Circuit Breaker (20 điểm)
 
-### Sự kiện Saga (package `event`, giống nhau ở cả 3 service)
-- `KafkaTopics.ORDER = "order"`
-- `OrderEvent { orderId, productId, quantity, amount, type, message }`
-- `SagaEventType`: `ORDER_CREATED`, `INVENTORY_RESERVED`, `INVENTORY_FAILED`, `PAYMENT_COMPLETED`, `PAYMENT_FAILED`, `INVENTORY_RELEASED`
+1. **OpenFeign & Spring Cloud LoadBalancer (10 điểm):**
+   - Tạo interface `InventoryClient` với `@FeignClient(name = "inventory-service")`.
+   - Khai báo các endpoint: lấy thông tin sản phẩm (`getProduct`), trừ kho (`decreaseStock`), hoàn kho (`increaseStock`).
+   - Bật `@EnableFeignClients` tại `OrderServiceApplication`.
+   - Cơ chế Spring Cloud LoadBalancer tự động phân phối request luân phiên qua các instances của inventory-service đã đăng ký với Eureka.
 
-Sinh viên được phép thay đổi/bổ sung các class này nếu thiết kế Saga theo cách khác.
+2. **Resilience4j Circuit Breaker & Cascading Failure Prevention (10 điểm):**
+   - Tạo lớp `InventoryServiceFacade` bọc gọi `InventoryClient` với annotation `@CircuitBreaker(name = "inventoryService", fallbackMethod = "...")`.
+   - Thiết lập cấu hình trượt (sliding window 5 calls, min 3 calls, failure rate threshold 50%, wait duration 10s):
+     - **Trạng thái CLOSED:** Hoạt động bình thường. Nếu tỷ lệ gọi thất bại vượt 50% $\rightarrow$ tự động mở mạch chuyển sang OPEN.
+     - **Trạng thái OPEN:** Ngắt kết nối ngay lập tức, không gửi request tới service đích (chống quá tải và ngăn chặn lỗi dây chuyền Cascading Failure), gọi ngay fallback method (`getProductFallback`).
+     - **Trạng thái HALF-OPEN:** Sau 10 giây chờ, cho phép 2 request thăm dò đi qua. Nếu thành công $\rightarrow$ chuyển về CLOSED; nếu tiếp tục lỗi $\rightarrow$ quay lại OPEN.
+   - Thử nghiệm minh chứng: Tắt inventory-service hoặc tạo request lỗi liên tiếp $\rightarrow$ Order-service không bị crash mà trả về fallback ngay lập tức.
 
-## 4. Chạy thử base project
+3. **Minh chứng Load Balancing với 2 Instances:**
+   - Khởi chạy instance 1 trên port 8082, instance 2 trên port 8084 (`-Dserver.port=8084`).
+   - Gọi endpoint `GET /api/inventory/instance` qua Gateway (`http://localhost:8080/api/inventory/instance`) nhiều lần: Gateway sẽ trả về luân phiên giữa port 8082 và 8084.
 
+---
+
+### Câu 3: Giao Dịch Phân Tán Với Saga Pattern & Apache Kafka (25 điểm)
+
+1. **Hạ Tầng Kafka Broker & Topic (10 điểm):**
+   - Cấu hình hạ tầng trong `docker-compose.yml` gồm Kafka Broker (cổng 9092) kết nối Zookeeper (cổng 2181) và hỗ trợ native KRaft.
+   - `order-service` cấu hình bean `NewTopic orderTopic()` tự động tạo topic `order` với 3 partitions và 1 replica.
+
+2. **Choreography Saga & Compensating Transaction (15 điểm):**
+   Luồng nghiệp vụ xử lý đặt hàng phân tán qua Kafka topic `order`:
+   - **Bước 1:** `order-service` tạo đơn với trạng thái ban đầu `PENDING`, đồng thời publish event `ORDER_CREATED`.
+   - **Bước 2 (Trừ kho):** `InventorySagaConsumer` nhận `ORDER_CREATED`:
+     - Nếu đủ tồn kho: Giảm stock, publish `INVENTORY_RESERVED`.
+     - Nếu thiếu tồn kho: Publish `INVENTORY_FAILED` $\rightarrow$ `order-service` nhận và cập nhật đơn thành `CANCELLED`.
+   - **Bước 3 (Thanh toán):** `PaymentSagaConsumer` nhận `INVENTORY_RESERVED`:
+     - Nếu hợp lệ: Xử lý thanh toán thành công, publish `PAYMENT_COMPLETED`.
+     - Nếu thất bại (thanh toán giả lập lỗi hoặc số tiền đơn hàng vượt hạn mức 80.000.000đ): Cập nhật trạng thái thanh toán `FAILED`, publish `PAYMENT_FAILED`.
+   - **Bước 4 (Compensating Rollback):**
+     - Khi `order-service` nhận `PAYMENT_COMPLETED` $\rightarrow$ Đổi trạng thái đơn sang `COMPLETED`.
+     - Khi `order-service` nhận `PAYMENT_FAILED` $\rightarrow$ Đổi trạng thái đơn sang `CANCELLED`, đồng thời gửi event `INVENTORY_RELEASED`.
+     - `InventorySagaConsumer` lắng nghe `INVENTORY_RELEASED` và gọi `productService.increaseStock(...)` để **hoàn lại số lượng tồn kho** ban đầu.
+   - **Chứng minh Rollback:**
+     - Đặt hàng 3 chiếc MacBook (Product id=3, đơn giá 28.000.000đ, tổng tiền 84.000.000đ > hạn mức 80.000.000đ).
+     - Kho hàng ban đầu giảm tồn kho $\rightarrow$ Payment thất bại $\rightarrow$ Saga kích hoạt hoàn kho $\rightarrow$ Tồn kho trở lại đúng số lượng ban đầu, đơn hàng chuyển trạng thái `CANCELLED` kèm lý do lỗi rõ ràng trong log SLF4J.
+
+3. **Nâng Cao – Reactive WebFlux Kafka Consumer (5 điểm):**
+   - Triển khai `ReactiveInventoryConsumer` bằng `reactor-kafka` và `Project Reactor Flux`.
+   - Chạy độc lập trong consumer group `inventory-reactive-monitor`, lắng nghe các event trên topic `order` theo cơ chế Non-blocking Reactive Streams và commit offset tự động.
+
+---
+
+### Câu 4: Tối Ưu Hiệu Năng Với Distributed Caching (Redis) (10 điểm)
+
+Áp dụng chiến lược **Cache-Aside** cho `inventory-service`:
+1. **Cấu hình Redis & Serialization:**
+   - Tích hợp `spring-boot-starter-data-redis` và `spring-boot-starter-cache`.
+   - Cấu hình `RedisCacheManager` tùy biến key serializer (`StringRedisSerializer`), value serializer (`GenericJackson2JsonRedisSerializer`), TTL 10 phút.
+2. **Sử dụng đúng bộ Annotation:**
+   - `@Cacheable(value = "products", key = "#id")`: Lưu kết quả tra cứu chi tiết sản phẩm.
+     - Lần gọi đầu: Truy vấn DB, in log `[CACHE MISS] Querying DB for product id=...`.
+     - Các lần gọi tiếp theo: Lấy trực tiếp từ Redis cache trong RAM, không in log query DB $\rightarrow$ Tốc độ phản hồi cực nhanh.
+   - `@CachePut(value = "products", key = "#id")`: Cập nhật lại thông tin vào cache khi sửa sản phẩm.
+   - `@CacheEvict(value = "products", key = "#id")`: Xóa cache tương ứng khi xóa sản phẩm hoặc khi tồn kho thay đổi (trừ tồn kho, hoàn tồn kho).
+
+---
+
+### Câu 5: Chất Lượng Code, Kiến Trúc & Kiểm Thử (10 điểm)
+
+1. **Clean Code & Kiến Trúc Chuẩn:**
+   - Đặt tên class, package theo chuẩn Clean Architecture (controller, service, repository, entity, dto, event, config).
+   - Không hard-code các thông số nhạy cảm/kết nối; ưu tiên lấy cấu hình từ Config Server.
+   - Ghi log SLF4J đầy đủ các cấp độ `INFO` và `ERROR` để dễ dàng truy vết và quan sát trạng thái giao dịch phân tán.
+
+2. **Bộ Unit Test Toàn Diện (21 tests - 100% Pass):**
+   - Đã viết unit test Mockito độc lập (không phụ thuộc external infrastructure):
+     - `order-service`: `OrderServiceImplTest` (4 tests), `OrderSagaConsumerTest` (3 tests) bao gồm test tạo đơn, hoàn tất đơn, hủy đơn, và test Saga Rollback khi nhận `PAYMENT_FAILED` (kiểm tra gửi event bù trừ `INVENTORY_RELEASED`).
+     - `inventory-service`: `ProductServiceImplTest` (4 tests), `InventorySagaConsumerTest` (3 tests) kiểm tra trừ kho, kiểm tra ném ngoại lệ khi hết hàng, và kiểm tra Rollback khôi phục tồn kho khi nhận `INVENTORY_RELEASED`.
+     - `payment-service`: `PaymentServiceImplTest` (5 tests), `PaymentSagaConsumerTest` (2 tests) kiểm tra thanh toán thành công, thanh toán vượt hạn mức, hoàn tiền và phát sinh event `PAYMENT_FAILED`.
+
+---
+
+## III. Hướng Dẫn Chạy & Kiểm Thử Hệ Thống
+
+### 1. Khởi động hạ tầng Docker
 ```bash
-# 1. Khởi động MySQL
 docker compose up -d
+```
+Lệnh trên sẽ khởi chạy MySQL (3306), Zookeeper (2181), Kafka (9092) và Redis (6379).
 
-# 2. Build toàn bộ
-mvn clean install
-
-# 3. Chạy từng service (hoặc Run trong IntelliJ)
-mvn -pl inventory-service spring-boot:run
-mvn -pl payment-service spring-boot:run
-mvn -pl order-service spring-boot:run
+### 2. Build toàn bộ project
+```powershell
+mvn clean package -DskipTests
+# Hoặc chạy kiểm thử:
+mvn test
 ```
 
-Postman collection mẫu: `postman/ShopMart.postman_collection.json`.
+### 3. Khởi chạy các service theo đúng thứ tự
+1. **Config Server:** Run `ConfigServerApplication` (cổng 8888).
+2. **Eureka Server:** Run `EurekaServerApplication` (cổng 8761) $\rightarrow$ Mở `http://localhost:8761` để xem dashboard.
+3. **API Gateway:** Run `ApiGatewayApplication` (cổng 8080).
+4. **Inventory Service (Instance 1):** Run `InventoryServiceApplication` (cổng 8082).
+5. **Inventory Service (Instance 2):** Run với VM option `-Dserver.port=8084` để test Load Balancing.
+6. **Payment Service:** Run `PaymentServiceApplication` (cổng 8083).
+7. **Order Service:** Run `OrderServiceApplication` (cổng 8081).
 
-## 5. Nhiệm vụ của sinh viên
-
-Tìm các comment `TODO Câu x` trong project (IntelliJ: **View → Tool Windows → TODO**).
-
-| Câu | Việc cần làm | Vị trí gợi ý |
-|---|---|---|
-| 1 | Config Server, Eureka Server, API Gateway; các service nạp cấu hình từ Config Server và đăng ký Eureka | `config-server`, `eureka-server`, `api-gateway`, `config-repo`, `*/application.yml`, `*/pom.xml` |
-| 2 | FeignClient `inventory-service` (lấy sản phẩm, trừ tồn kho) + LoadBalancer + Resilience4j `@CircuitBreaker` + fallback; chạy 2 instance inventory-service | `order-service` |
-| 3 | Kafka (zookeeper + kafka), topic `order`, producer/consumer; Saga (Choreography hoặc Orchestration) + compensating; chứng minh rollback khi thanh toán lỗi; (nâng cao) consumer reactive | `docker-compose.yml`, cả 3 service |
-| 4 | Redis + `@Cacheable` / `@CachePut` / `@CacheEvict` cho sản phẩm | `inventory-service` |
-| 5 | Clean code, không hard-code cấu hình, log SLF4J, unit test + ít nhất 1 test rollback | toàn project |
-
-> Gợi ý chạy 2 instance inventory-service: IntelliJ → Edit Configurations → Copy configuration →
-> thêm VM option `-Dserver.port=8084`.
+### 4. Sử dụng Postman để kiểm thử
+Import file Postman collection có sẵn tại: `postman/ShopMart.postman_collection.json`.
+Bộ sưu tập gồm các thư mục:
+- `1. API Gateway (Port 8080)`: Thử nghiệm toàn bộ hệ thống qua Gateway.
+- `2. Inventory Service (Port 8082)`: Test cache Redis, trừ/hoàn kho.
+- `3. Payment Service (Port 8083)`: Test thanh toán, giả lập lỗi vượt hạn mức, hoàn tiền.
+- `4. Order Service (Port 8081)`: Test gọi Feign + Circuit Breaker, Saga Happy Path và Saga Rollback.

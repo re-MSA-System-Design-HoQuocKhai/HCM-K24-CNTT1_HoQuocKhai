@@ -1,20 +1,72 @@
 {
   "info": {
-    "name": "ShopMart - Base Project",
-    "description": "Gọi trực tiếp từng service. Sau khi hoàn thành API Gateway (Câu 1), đổi các biến orderUrl/inventoryUrl/paymentUrl thành http://localhost:8080 để đi qua Gateway.",
+    "name": "ShopMart - Microservices Session 14",
+    "description": "Postman Collection đầy đủ cho ShopMart Microservices:\n- Test trực tiếp các service (8081, 8082, 8083)\n- Test qua API Gateway (8080)\n- Test FeignClient + Load Balancing + Circuit Breaker (Resilience4j)\n- Test Distributed Transaction Saga (Choreography) + Compensating Rollback khi Payment thất bại\n- Test Redis Cache-Aside (@Cacheable, @CachePut, @CacheEvict)",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
   "variable": [
+    { "key": "gatewayUrl", "value": "http://localhost:8080" },
     { "key": "orderUrl", "value": "http://localhost:8081" },
     { "key": "inventoryUrl", "value": "http://localhost:8082" },
     { "key": "paymentUrl", "value": "http://localhost:8083" }
   ],
   "item": [
     {
-      "name": "Inventory",
+      "name": "1. API Gateway (Port 8080)",
       "item": [
         {
-          "name": "Get instance port",
+          "name": "Gateway - Inventory Instance (Load Balancing test)",
+          "request": { "method": "GET", "url": "{{gatewayUrl}}/api/inventory/instance" }
+        },
+        {
+          "name": "Gateway - Get all products (Inventory)",
+          "request": { "method": "GET", "url": "{{gatewayUrl}}/api/inventory/products" }
+        },
+        {
+          "name": "Gateway - Get product by id (Inventory)",
+          "request": { "method": "GET", "url": "{{gatewayUrl}}/api/inventory/products/1" }
+        },
+        {
+          "name": "Gateway - FeignClient & CircuitBreaker (Order -> Inventory)",
+          "request": { "method": "GET", "url": "{{gatewayUrl}}/api/order/products/1" }
+        },
+        {
+          "name": "Gateway - Create Order (Happy Path Saga)",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"customerId\": \"C001\",\n  \"productId\": 1,\n  \"quantity\": 2\n}" },
+            "url": "{{gatewayUrl}}/api/order"
+          }
+        },
+        {
+          "name": "Gateway - Create Order (Rollback when Payment Fails > 80M)",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"customerId\": \"C002\",\n  \"productId\": 3,\n  \"quantity\": 3\n}" },
+            "url": "{{gatewayUrl}}/api/order"
+          }
+        },
+        {
+          "name": "Gateway - Get order by id",
+          "request": { "method": "GET", "url": "{{gatewayUrl}}/api/order/1" }
+        },
+        {
+          "name": "Gateway - Get all orders",
+          "request": { "method": "GET", "url": "{{gatewayUrl}}/api/order" }
+        },
+        {
+          "name": "Gateway - Get payment by orderId",
+          "request": { "method": "GET", "url": "{{gatewayUrl}}/api/payment/1" }
+        }
+      ]
+    },
+    {
+      "name": "2. Inventory Service (Port 8082)",
+      "item": [
+        {
+          "name": "Get instance port (Load Balancing)",
           "request": { "method": "GET", "url": "{{inventoryUrl}}/api/inventory/instance" }
         },
         {
@@ -22,7 +74,7 @@
           "request": { "method": "GET", "url": "{{inventoryUrl}}/api/inventory/products" }
         },
         {
-          "name": "Get product by id",
+          "name": "Get product by id (@Cacheable Cache-Aside)",
           "request": { "method": "GET", "url": "{{inventoryUrl}}/api/inventory/products/1" }
         },
         {
@@ -35,7 +87,7 @@
           }
         },
         {
-          "name": "Update product",
+          "name": "Update product (@CachePut)",
           "request": {
             "method": "PUT",
             "header": [{ "key": "Content-Type", "value": "application/json" }],
@@ -44,7 +96,7 @@
           }
         },
         {
-          "name": "Decrease stock",
+          "name": "Decrease stock (@CacheEvict)",
           "request": {
             "method": "PUT",
             "header": [{ "key": "Content-Type", "value": "application/json" }],
@@ -53,18 +105,25 @@
           }
         },
         {
-          "name": "Increase stock (compensate)",
+          "name": "Increase stock / Compensate (@CacheEvict)",
           "request": {
             "method": "PUT",
             "header": [{ "key": "Content-Type", "value": "application/json" }],
             "body": { "mode": "raw", "raw": "{\n  \"quantity\": 2\n}" },
             "url": "{{inventoryUrl}}/api/inventory/products/1/increase"
           }
+        },
+        {
+          "name": "Delete product (@CacheEvict)",
+          "request": {
+            "method": "DELETE",
+            "url": "{{inventoryUrl}}/api/inventory/products/1"
+          }
         }
       ]
     },
     {
-      "name": "Payment",
+      "name": "3. Payment Service (Port 8083)",
       "item": [
         {
           "name": "Pay (success)",
@@ -76,7 +135,7 @@
           }
         },
         {
-          "name": "Pay (fail - over max-amount)",
+          "name": "Pay (fail - over max-amount 80M)",
           "request": {
             "method": "POST",
             "header": [{ "key": "Content-Type", "value": "application/json" }],
@@ -99,10 +158,14 @@
       ]
     },
     {
-      "name": "Order",
+      "name": "4. Order Service (Port 8081)",
       "item": [
         {
-          "name": "Create order (happy path)",
+          "name": "FeignClient & CircuitBreaker - Get product from inventory",
+          "request": { "method": "GET", "url": "{{orderUrl}}/api/order/products/1" }
+        },
+        {
+          "name": "Create order (happy path Saga)",
           "request": {
             "method": "POST",
             "header": [{ "key": "Content-Type", "value": "application/json" }],
@@ -111,7 +174,7 @@
           }
         },
         {
-          "name": "Create order (payment fail -> rollback)",
+          "name": "Create order (payment fail -> Saga rollback)",
           "request": {
             "method": "POST",
             "header": [{ "key": "Content-Type", "value": "application/json" }],
