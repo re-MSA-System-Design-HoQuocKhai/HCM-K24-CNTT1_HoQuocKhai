@@ -38,6 +38,17 @@
             <optional>true</optional>
         </dependency>
 
+        <!-- Spring Cloud Config Client -->
+        <dependency>
+            <groupId>org.springframework.cloud</groupId>
+            <artifactId>spring-cloud-starter-config</artifactId>
+        </dependency>
+        <!-- Eureka Discovery Client -->
+        <dependency>
+            <groupId>org.springframework.cloud</groupId>
+            <artifactId>spring-cloud-starter-netflix-eureka-client</artifactId>
+        </dependency>
+
         <!--
             TODO Câu 1: spring-cloud-starter-config, spring-cloud-starter-netflix-eureka-client
             TODO Câu 2: spring-cloud-starter-openfeign, spring-cloud-starter-loadbalancer,

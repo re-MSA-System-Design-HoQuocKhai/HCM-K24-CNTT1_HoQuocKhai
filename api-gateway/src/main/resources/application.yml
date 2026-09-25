@@ -4,11 +4,23 @@ server:
 spring:
   application:
     name: api-gateway
+  cloud:
+    gateway:
+      routes:
+        - id: order-service
+          uri: lb://order-service
+          predicates:
+            - Path=/api/order/**
+        - id: inventory-service
+          uri: lb://inventory-service
+          predicates:
+            - Path=/api/inventory/**
+        - id: payment-service
+          uri: lb://payment-service
+          predicates:
+            - Path=/api/payment/**
 
-# TODO Câu 1: Khai báo routes cho Gateway (dùng lb:// để có Load Balancing)
-#   /api/order/**     -> order-service
-#   /api/inventory/** -> inventory-service
-#   /api/payment/**   -> payment-service
-#
-# TODO Câu 1: Đăng ký vào Eureka
-#   eureka.client.serviceUrl.defaultZone=http://localhost:8761/eureka
+eureka:
+  client:
+    service-url:
+      defaultZone: http://localhost:8761/eureka

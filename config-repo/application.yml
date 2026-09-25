@@ -1,11 +1,26 @@
-# ======================================================================
-# CẤU HÌNH DÙNG CHUNG CHO TẤT CẢ SERVICE (được Config Server phân phát)
-# ======================================================================
-# TODO Câu 1: Đưa các cấu hình dùng chung vào đây, ví dụ:
-#   - eureka.client.serviceUrl.defaultZone
-#   - spring.kafka.bootstrap-servers
-#   - spring.data.redis.host / port
-#   - logging.level...
-#
-# Cấu hình riêng từng service đặt trong file <spring.application.name>.yml
-# (ví dụ: order-service.yml, inventory-service.yml, payment-service.yml)
+# Shared configuration for all services
+eureka:
+  client:
+    service-url:
+      defaultZone: http://localhost:8761/eureka
+
+spring:
+  kafka:
+    bootstrap-servers: localhost:9092
+    producer:
+      key-serializer: org.apache.kafka.common.serialization.StringSerializer
+      value-serializer: org.springframework.kafka.support.serializer.JsonSerializer
+    consumer:
+      key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+      value-deserializer: org.springframework.kafka.support.serializer.JsonDeserializer
+      properties:
+        spring.json.trusted.packages: '*'
+      auto-offset-reset: earliest
+  data:
+    redis:
+      host: localhost
+      port: 6379
+
+logging:
+  level:
+    com.shopmart: INFO

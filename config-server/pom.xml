@@ -17,8 +17,8 @@
     <dependencies>
         <!-- TODO Câu 1: thay spring-boot-starter bằng dependency spring-cloud-config-server -->
         <dependency>
-            <groupId>org.springframework.boot</groupId>
-            <artifactId>spring-boot-starter</artifactId>
+            <groupId>org.springframework.cloud</groupId>
+            <artifactId>spring-cloud-config-server</artifactId>
         </dependency>
 
         <dependency>

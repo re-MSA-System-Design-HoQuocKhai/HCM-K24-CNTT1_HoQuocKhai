@@ -5,6 +5,9 @@ spring:
   application:
     name: eureka-server
 
-# TODO Câu 1: Cấu hình Eureka Server
-#   - Server không tự đăng ký chính nó và không fetch registry
-#   - Dashboard: http://localhost:8761
+eureka:
+  client:
+    register-with-eureka: false
+    fetch-registry: false
+    service-url:
+      defaultZone: http://localhost:8761/eureka

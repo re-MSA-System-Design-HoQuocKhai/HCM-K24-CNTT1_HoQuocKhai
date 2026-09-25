@@ -1,7 +1,9 @@
 package com.shopmart.order.controller;
 
+import com.shopmart.order.client.InventoryServiceFacade;
 import com.shopmart.order.dto.OrderRequest;
 import com.shopmart.order.dto.OrderResponse;
+import com.shopmart.order.dto.ProductDto;
 import com.shopmart.order.service.OrderService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
@@ -22,6 +24,7 @@ import java.util.List;
 public class OrderController {
 
     private final OrderService orderService;
+    private final InventoryServiceFacade inventoryFacade;
 
     @PostMapping
     public ResponseEntity<OrderResponse> create(@Valid @RequestBody OrderRequest request) {
@@ -38,6 +41,12 @@ public class OrderController {
         return orderService.getAllOrders();
     }
 
-    // TODO Câu 2: Thêm endpoint gọi thử inventory-service qua FeignClient
-    //            (vd: GET /api/order/products/{id}) để minh chứng Load Balancing + Circuit Breaker
+    /**
+     * Endpoint test: gọi inventory-service qua FeignClient để minh chứng
+     * Load Balancing + Circuit Breaker hoạt động.
+     */
+    @GetMapping("/products/{id}")
+    public ProductDto getProductFromInventory(@PathVariable Long id) {
+        return inventoryFacade.getProduct(id);
+    }
 }
